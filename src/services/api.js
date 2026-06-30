@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// Usamos a variável de ambiente se existir, caso contrário assume /api/ (padrão local)
+// Usamos a variável de ambiente, mas se ela não existir, forçamos o endereço do Render
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/', 
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://api-ecommerce-auto-pecas-gramense.onrender.com/api', 
 });
 
 // Interceptor de Requisição: Adiciona o Token
