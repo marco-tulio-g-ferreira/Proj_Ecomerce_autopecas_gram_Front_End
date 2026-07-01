@@ -11,17 +11,17 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleGuard } from './components/RoleGuard';
 import Layout from './components/Layout';
 
-// Páginas (Verifique se estes nomes coincidem exatamente com seus arquivos em src/pages/)
+// Páginas
 import AuthPage from './pages/AuthPage';
 import CatalogWrapper from './pages/CatalogWrapper'; 
 import PdvWrapper from './pages/PdvWrapper';
 import AdminWrapper from './pages/AdminWrapper';
 import Profile from './pages/Profile';
 
-// API
-import api from './api';
+// Importação corrigida apontando para a pasta services
+import api from './services/api';
 
-// Configuração do React Query para gerenciar cache e evitar recarregamentos
+// Configuração do React Query
 const queryClient = new QueryClient();
 
 function AppContent() {
