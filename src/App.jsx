@@ -1,66 +1,73 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './context/AuthContext';
 import { ImportProvider } from './context/ImportContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleGuard } from './components/RoleGuard';
 import Layout from './components/Layout';
 import AuthPage from './pages/AuthPage';
-import CatalogWrapper from './pages/CatalogWrapper'; 
-import PdvWrapper from "./pages/PdvWrapper";
-import AdminWrapper from "./pages/AdminWrapper";
-import Profile from './pages/Profile';
-import api from './api'; // Importando a instância do axios configurada
+import api from './api';
+
+// Otimização: Lazy Loading para carregar componentes apenas quando necessário
+const CatalogWrapper = lazy(() => import('./pages/CatalogWrapper'));
+const PdvWrapper = lazy(() => import('./pages/PdvWrapper'));
+const AdminWrapper = lazy(() => import('./pages/AdminWrapper'));
+const Profile = lazy(() => import('./pages/Profile'));
+
+// Criação do cliente de cache para o React Query
+const queryClient = new QueryClient();
 
 function AppContent() {
   
   useEffect(() => {
-    // 1ª TÉCNICA: "O Truque do Mantenedor" (Cold Start)
-    // Fazemos uma requisição leve ao carregar o app para acordar o servidor Render
-    // Usamos um endpoint leve como /categories/ ou /products/
-    api.get('/categories/').catch(() => {
-      // Ignoramos erros aqui, pois o objetivo é apenas acordar o servidor
-    });
+    // Mantém o servidor Render ativo ("Cold Start")
+    api.get('/categories/').catch(() => {});
   }, []);
 
   return (
-    <Routes>
-      <Route path="/login" element={<AuthPage />} /> 
-      
-      <Route path="/*" element={
-        <ProtectedRoute>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<CatalogWrapper />} />
-              <Route path="/perfil" element={<Profile />} />
-              
-              <Route path="/pdv" element={
-                <RoleGuard allowedRoles={['caixa', 'admin']}>
-                  <PdvWrapper />
-                </RoleGuard>
-              } />
-              
-              <Route path="/admin/*" element={
-                <RoleGuard allowedRoles={['admin']}>
-                  <AdminWrapper />
-                </RoleGuard>
-              } />
-            </Routes>
-          </Layout>
-        </ProtectedRoute>
-      } />
-    </Routes>
+    // Suspense mostra um fallback enquanto o componente lazy carrega
+    <Suspense fallback={<div className="loading-spinner">Carregando...</div>}>
+      <Routes>
+        <Route path="/login" element={<AuthPage />} /> 
+        
+        <Route path="/*" element={
+          <ProtectedRoute>
+            <Layout>
+              <Routes>
+                <Route path="/" element={<CatalogWrapper />} />
+                <Route path="/perfil" element={<Profile />} />
+                
+                <Route path="/pdv" element={
+                  <RoleGuard allowedRoles={['caixa', 'admin']}>
+                    <PdvWrapper />
+                  </RoleGuard>
+                } />
+                
+                <Route path="/admin/*" element={
+                  <RoleGuard allowedRoles={['admin']}>
+                    <AdminWrapper />
+                  </RoleGuard>
+                } />
+              </Routes>
+            </Layout>
+          </ProtectedRoute>
+        } />
+      </Routes>
+    </Suspense>
   );
 }
 
 export default function App() { 
   return (
     <Router>
-      <AuthProvider>
-        <ImportProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <ImportProvider>
             <AppContent />
-        </ImportProvider>
-      </AuthProvider>
+          </ImportProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </Router>
   );
 }
