@@ -58,6 +58,7 @@ function ProductDetailsModal({ p, isOpen, onClose, getCategoryName }) {
           <div className="w-full space-y-3 mt-4 text-sm dark:text-slate-300">
             <p><strong className="text-slate-500 dark:text-slate-400">Nome:</strong> {p.name}</p>
             <p><strong className="text-slate-500 dark:text-slate-400">SKU:</strong> {p.sku}</p>
+            <p><strong className="text-slate-500 dark:text-slate-400">Preço:</strong> {p.price ? `R$ ${p.price}` : 'Não informado'}</p>
             <p><strong className="text-slate-500 dark:text-slate-400">Categoria:</strong> {getCategoryName(p.category)}</p>
           </div>
         </div>
@@ -71,6 +72,7 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(p.name);
   const [sku, setSku] = useState(p.sku);
+  const [price, setPrice] = useState(p.price || '');
   const [imageFile, setImageFile] = useState(null);
   const [preview, setPreview] = useState(p.image_url || null);
   const [removeImage, setRemoveImage] = useState(false);
@@ -90,6 +92,7 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
     if (open) {
       setName(p.name);
       setSku(p.sku);
+      setPrice(p.price || '');
       setPreview(p.image_url || null);
       setImageFile(null);
       setRemoveImage(false);
@@ -138,12 +141,13 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
     const formData = new FormData();
     formData.append('name', name);
     formData.append('sku', sku);
+    formData.append('price', price);
     if (removeImage) formData.append('remove_image', 'true');
     if (imageFile) formData.append('image', imageFile);
 
     try {
       await api.patch(`products/${p.id}/`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      onUpdate(p.id, { name, sku });
+      onUpdate(p.id, { name, sku, price });
       onRefresh();
       notify("Produto atualizado!");
       setOpen(false);
@@ -189,6 +193,7 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
           <div className="space-y-4">
             <div><label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">Nome</label><input value={name} onChange={e => setName(e.target.value)} className="w-full p-2 border dark:border-slate-700 rounded text-sm dark:bg-slate-800 dark:text-white" /></div>
             <div><label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">SKU</label><input value={sku} onChange={e => setSku(e.target.value)} className="w-full p-2 border dark:border-slate-700 rounded text-sm dark:bg-slate-800 dark:text-white" /></div>
+            <div><label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">Preço</label><input type="number" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-2 border dark:border-slate-700 rounded text-sm dark:bg-slate-800 dark:text-white" /></div>
           </div>
           <button onClick={handleSave} className="w-full bg-blue-600 text-white p-2 rounded mt-6 font-bold text-sm hover:bg-blue-700">Salvar</button>
         </DialogContent>
@@ -293,7 +298,13 @@ export default function AdminDashboard({ products = [], categories = [], stats =
                   <>
                     <table className="w-full text-left">
                       <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
-                        <tr><th className="p-4 text-xs font-bold dark:text-slate-300">IMAGEM</th><th className="p-4 text-xs font-bold dark:text-slate-300">SKU</th><th className="p-4 text-xs font-bold dark:text-slate-300">NOME</th><th className="p-4 text-xs font-bold dark:text-slate-300 text-right">AÇÕES</th></tr>
+                        <tr>
+                            <th className="p-4 text-xs font-bold dark:text-slate-300">IMAGEM</th>
+                            <th className="p-4 text-xs font-bold dark:text-slate-300">SKU</th>
+                            <th className="p-4 text-xs font-bold dark:text-slate-300">NOME</th>
+                            <th className="p-4 text-xs font-bold dark:text-slate-300">PREÇO</th>
+                            <th className="p-4 text-xs font-bold dark:text-slate-300 text-right">AÇÕES</th>
+                        </tr>
                       </thead>
                       <tbody className="divide-y dark:divide-slate-700">
                         {data.map(p => (
@@ -301,6 +312,7 @@ export default function AdminDashboard({ products = [], categories = [], stats =
                             <td className="p-4"><ProductImage src={p.image_url} /></td>
                             <td className="p-4 text-xs font-mono dark:text-slate-400">{p.sku}</td>
                             <td className="p-4 text-sm dark:text-slate-200">{p.name}</td>
+                            <td className="p-4 text-sm dark:text-slate-200">{p.price ? `R$ ${p.price}` : '—'}</td>
                             <td className="p-4 text-right flex justify-end gap-2">
                                <button onClick={() => setDetailsProduct(p)} className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">DETALHES</button>
                                <EditProduct p={p} onUpdate={(id, d) => setData(prev => prev.map(p => p.id === id ? {...p, ...d} : p))} onRefresh={onRefreshData} notify={notify} />
