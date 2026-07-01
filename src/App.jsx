@@ -1,60 +1,65 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// Contextos
 import { AuthProvider } from './context/AuthContext';
 import { ImportProvider } from './context/ImportContext';
+
+// Componentes
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleGuard } from './components/RoleGuard';
 import Layout from './components/Layout';
+
+// Páginas (Verifique se estes nomes coincidem exatamente com seus arquivos em src/pages/)
 import AuthPage from './pages/AuthPage';
+import CatalogWrapper from './pages/CatalogWrapper'; 
+import PdvWrapper from './pages/PdvWrapper';
+import AdminWrapper from './pages/AdminWrapper';
+import Profile from './pages/Profile';
+
+// API
 import api from './api';
 
-// Otimização: Lazy Loading para carregar componentes apenas quando necessário
-const CatalogWrapper = lazy(() => import('./pages/CatalogWrapper'));
-const PdvWrapper = lazy(() => import('./pages/PdvWrapper'));
-const AdminWrapper = lazy(() => import('./pages/AdminWrapper'));
-const Profile = lazy(() => import('./pages/Profile'));
-
-// Criação do cliente de cache para o React Query
+// Configuração do React Query para gerenciar cache e evitar recarregamentos
 const queryClient = new QueryClient();
 
 function AppContent() {
   
   useEffect(() => {
-    // Mantém o servidor Render ativo ("Cold Start")
+    // Mantém o servidor Render ativo
     api.get('/categories/').catch(() => {});
   }, []);
 
   return (
-    // Suspense mostra um fallback enquanto o componente lazy carrega
-    <Suspense fallback={<div className="loading-spinner">Carregando...</div>}>
-      <Routes>
-        <Route path="/login" element={<AuthPage />} /> 
-        
-        <Route path="/*" element={
-          <ProtectedRoute>
-            <Layout>
-              <Routes>
-                <Route path="/" element={<CatalogWrapper />} />
-                <Route path="/perfil" element={<Profile />} />
-                
-                <Route path="/pdv" element={
-                  <RoleGuard allowedRoles={['caixa', 'admin']}>
-                    <PdvWrapper />
-                  </RoleGuard>
-                } />
-                
-                <Route path="/admin/*" element={
-                  <RoleGuard allowedRoles={['admin']}>
-                    <AdminWrapper />
-                  </RoleGuard>
-                } />
-              </Routes>
-            </Layout>
-          </ProtectedRoute>
-        } />
-      </Routes>
-    </Suspense>
+    <Routes>
+      {/* Rota de Login acessível a todos */}
+      <Route path="/login" element={<AuthPage />} /> 
+      
+      {/* Rotas protegidas */}
+      <Route path="/*" element={
+        <ProtectedRoute>
+          <Layout>
+            <Routes>
+              <Route path="/" element={<CatalogWrapper />} />
+              <Route path="/perfil" element={<Profile />} />
+              
+              <Route path="/pdv" element={
+                <RoleGuard allowedRoles={['caixa', 'admin']}>
+                  <PdvWrapper />
+                </RoleGuard>
+              } />
+              
+              <Route path="/admin/*" element={
+                <RoleGuard allowedRoles={['admin']}>
+                  <AdminWrapper />
+                </RoleGuard>
+              } />
+            </Routes>
+          </Layout>
+        </ProtectedRoute>
+      } />
+    </Routes>
   );
 }
 
