@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Edit, LayoutDashboard, Database, Upload, Image as ImageIcon, X, Camera, RotateCcw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Trash2, Edit, LayoutDashboard, Database, Upload, Image as ImageIcon, X, Camera, RotateCcw, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import ImportProducts from '../components/importProducts';
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -66,7 +66,7 @@ function ProductDetailsModal({ p, isOpen, onClose, getCategoryName }) {
   );
 }
 
-// --- SUB-COMPONENTE EDITAR (COM CÂMERA COMPLETA) ---
+// --- SUB-COMPONENTE EDITAR ---
 function EditProduct({ p, onUpdate, onRefresh, notify }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(p.name);
@@ -208,7 +208,6 @@ export default function AdminDashboard({ products = [], categories = [], stats =
   const [detailsProduct, setDetailsProduct] = useState(null);
   const [pendingCount, setPendingCount] = useState(0);
   
-  // Estados globais persistentes via Contexto
   const [toast, setToast] = useState(null);
   const { setProgress } = useImport(); 
 
@@ -285,33 +284,41 @@ export default function AdminDashboard({ products = [], categories = [], stats =
                 </select>
              </div>
              
-             <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-xl overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
-                    <tr><th className="p-4 text-xs font-bold dark:text-slate-300">IMAGEM</th><th className="p-4 text-xs font-bold dark:text-slate-300">SKU</th><th className="p-4 text-xs font-bold dark:text-slate-300">NOME</th><th className="p-4 text-xs font-bold dark:text-slate-300 text-right">AÇÕES</th></tr>
-                  </thead>
-                  <tbody className="divide-y dark:divide-slate-700">
-                    {data.map(p => (
-                      <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td className="p-4"><ProductImage src={p.image_url} /></td>
-                        <td className="p-4 text-xs font-mono dark:text-slate-400">{p.sku}</td>
-                        <td className="p-4 text-sm dark:text-slate-200">{p.name}</td>
-                        <td className="p-4 text-right flex justify-end gap-2">
-                           <button onClick={() => setDetailsProduct(p)} className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">DETALHES</button>
-                           <EditProduct p={p} onUpdate={(id, d) => setData(prev => prev.map(p => p.id === id ? {...p, ...d} : p))} onRefresh={onRefreshData} notify={notify} />
-                           <button onClick={() => window.confirm("Excluir?") && handleApiRequest('DELETE', `products/${p.id}/`)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500"><Trash2 size={16}/></button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex items-center justify-between p-4 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
-                  <span className="text-xs font-bold dark:text-slate-400">Total: {pagination.count}</span>
-                  <div className="flex gap-2">
-                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="px-3 py-1 text-xs border dark:border-slate-600 rounded dark:text-slate-300">Anterior</button>
-                    <button disabled={currentPage >= Math.ceil(pagination.count / 10)} onClick={() => setCurrentPage(p => p + 1)} className="px-3 py-1 text-xs border dark:border-slate-600 rounded dark:text-slate-300">Próximo</button>
+             <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-xl overflow-x-auto min-h-[300px] relative">
+                {isSearching ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-slate-900/50 z-10">
+                    <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
                   </div>
-                </div>
+                ) : (
+                  <>
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
+                        <tr><th className="p-4 text-xs font-bold dark:text-slate-300">IMAGEM</th><th className="p-4 text-xs font-bold dark:text-slate-300">SKU</th><th className="p-4 text-xs font-bold dark:text-slate-300">NOME</th><th className="p-4 text-xs font-bold dark:text-slate-300 text-right">AÇÕES</th></tr>
+                      </thead>
+                      <tbody className="divide-y dark:divide-slate-700">
+                        {data.map(p => (
+                          <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                            <td className="p-4"><ProductImage src={p.image_url} /></td>
+                            <td className="p-4 text-xs font-mono dark:text-slate-400">{p.sku}</td>
+                            <td className="p-4 text-sm dark:text-slate-200">{p.name}</td>
+                            <td className="p-4 text-right flex justify-end gap-2">
+                               <button onClick={() => setDetailsProduct(p)} className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded">DETALHES</button>
+                               <EditProduct p={p} onUpdate={(id, d) => setData(prev => prev.map(p => p.id === id ? {...p, ...d} : p))} onRefresh={onRefreshData} notify={notify} />
+                               <button onClick={() => window.confirm("Excluir?") && handleApiRequest('DELETE', `products/${p.id}/`)} className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500"><Trash2 size={16}/></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="flex items-center justify-between p-4 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
+                      <span className="text-xs font-bold dark:text-slate-400">Total: {pagination.count}</span>
+                      <div className="flex gap-2">
+                        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="px-3 py-1 text-xs border dark:border-slate-600 rounded dark:text-slate-300">Anterior</button>
+                        <button disabled={currentPage >= Math.ceil(pagination.count / 10)} onClick={() => setCurrentPage(p => p + 1)} className="px-3 py-1 text-xs border dark:border-slate-600 rounded dark:text-slate-300">Próximo</button>
+                      </div>
+                    </div>
+                  </>
+                )}
              </div>
           </motion.div>
         )}
