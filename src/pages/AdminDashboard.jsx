@@ -219,8 +219,12 @@ export default function AdminDashboard({ products = [], categories = [], stats =
   const notify = (message, type = 'success') => setToast({ message, type });
 
   const fetchPendingCount = useCallback(async () => {
-    try { const res = await api.get("/revisao/"); setPendingCount(res.data.length || 0); } catch (e) {}
-  }, []);
+  try {
+    const res = await api.get("/revisao/");
+    const count = res.data.count ?? (Array.isArray(res.data) ? res.data.length : (res.data.results?.length || 0));
+    setPendingCount(count);
+  } catch (e) {}
+}, []);
 
   useEffect(() => { fetchPendingCount(); }, [fetchPendingCount]);
   useEffect(() => { setCurrentPage(1); }, [search, selectedCategory]);
