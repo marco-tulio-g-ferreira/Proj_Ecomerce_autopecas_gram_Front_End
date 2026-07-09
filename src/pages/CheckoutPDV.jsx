@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import api from '../services/api'; 
+import api from '../services/api';
 
 export default function CheckoutPDV({ onSearch, onRefreshData, onAddTransaction }) {
   // Estados do Carrinho e PDV
@@ -9,7 +9,7 @@ export default function CheckoutPDV({ onSearch, onRefreshData, onAddTransaction 
   const [operacaoTipo, setOperacaoTipo] = useState('SAIDA');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Estados do PIX
   const [pixData, setPixData] = useState(null); // { brcode: '...', txid: '...' }
   const [showPixModal, setShowPixModal] = useState(false);
@@ -20,8 +20,8 @@ export default function CheckoutPDV({ onSearch, onRefreshData, onAddTransaction 
     if (!skuInput.trim()) return;
 
     const resultados = await onSearch(skuInput);
-    const product = resultados.find(p => 
-      String(p.sku || '').trim().toLowerCase() === skuInput.trim().toLowerCase() || 
+    const product = resultados.find(p =>
+      String(p.sku || '').trim().toLowerCase() === skuInput.trim().toLowerCase() ||
       String(p.codigo_oem || '').trim().toLowerCase() === skuInput.trim().toLowerCase()
     );
 
@@ -53,12 +53,12 @@ export default function CheckoutPDV({ onSearch, onRefreshData, onAddTransaction 
   const iniciarPagamentoPix = async () => {
     setIsSubmitting(true);
     try {
-      const response = await api.post('/pagamento/pix/gerar/', { 
+      const response = await api.post('/pagamento/pix/gerar/', {
         valor: total,
-        itens: cart 
+        itens: cart
       });
       // Espera-se que seu backend retorne o brcode do Sicoob
-      setPixData(response.data); 
+      setPixData(response.data);
       setShowPixModal(true);
     } catch (err) {
       setErrorMessage("Erro ao gerar PIX: " + (err.response?.data?.message || "Falha na conexão."));
@@ -145,9 +145,9 @@ export default function CheckoutPDV({ onSearch, onRefreshData, onAddTransaction 
       <div className="bg-zinc-950 p-6 rounded-xl border border-zinc-800 h-fit">
         <h3 className="text-zinc-500 text-[10px] font-bold uppercase">Total Consolidado</h3>
         <div className="text-3xl font-bold text-white my-4">R$ {total.toFixed(2)}</div>
-        <button 
-          onClick={operacaoTipo === 'SAIDA' ? iniciarPagamentoPix : finalizarMovimentacao} 
-          disabled={isSubmitting || cart.length === 0} 
+        <button
+          onClick={operacaoTipo === 'SAIDA' ? iniciarPagamentoPix : finalizarMovimentacao}
+          disabled={isSubmitting || cart.length === 0}
           className="w-full py-3 bg-blue-600 rounded text-white font-bold uppercase text-xs"
         >
           {isSubmitting ? 'Processando...' : operacaoTipo === 'SAIDA' ? 'Gerar PIX' : 'Finalizar Lote'}
@@ -157,31 +157,34 @@ export default function CheckoutPDV({ onSearch, onRefreshData, onAddTransaction 
       {/* MODAL DO PIX */}
       <AnimatePresence>
         {showPixModal && pixData && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }} 
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
           >
             <div className="bg-zinc-900 border border-zinc-700 p-8 rounded-2xl max-w-sm w-full text-center">
               <h3 className="text-xl font-bold text-white mb-2">Pagamento via PIX</h3>
               <p className="text-zinc-400 text-sm mb-6">Escaneie ou copie o código abaixo:</p>
-              
-              <div className="bg-white p-4 rounded-xl mb-4 overflow-hidden">
+
+              <div className="bg-white p-4 rounded-xl mb-4 overflow-hidden flex flex-col items-center gap-3">
+                {pixData.qrcode_imagem && (
+                  <img src={pixData.qrcode_imagem} alt="QR Code PIX" className="w-48 h-48" />
+                )}
                 <div className="text-[10px] text-zinc-800 break-all font-mono">
                   {pixData.brcode}
                 </div>
               </div>
 
               <div className="space-y-3">
-                <button 
-                  onClick={() => navigator.clipboard.writeText(pixData.brcode)} 
+                <button
+                  onClick={() => navigator.clipboard.writeText(pixData.brcode)}
                   className="w-full py-2 bg-zinc-800 text-white rounded text-xs font-bold hover:bg-zinc-700"
                 >
                   Copiar Código PIX
                 </button>
-                <button 
-                  onClick={finalizarMovimentacao} 
+                <button
+                  onClick={finalizarMovimentacao}
                   className="w-full py-3 bg-emerald-600 text-white rounded font-bold text-xs hover:bg-emerald-500"
                 >
                   Confirmar Pagamento e Baixar Estoque
