@@ -33,7 +33,6 @@ export default function ImportProducts({ onRefresh }) {
   const fetchRevisoes = async () => {
     try {
       const res = await api.get("/revisao/");
-      // Ajuste: verifica se é array, se não, tenta acessar .results ou .items
       const data = Array.isArray(res.data) ? res.data : (res.data.results || res.data.items || []);
       setRevisoes(data);
     } catch (err) {
@@ -41,18 +40,16 @@ export default function ImportProducts({ onRefresh }) {
     }
   };
 
-  // 1. Efeito apenas para carregar a lista inicial
   useEffect(() => {
     fetchRevisoes();
   }, []);
 
-  // 2. Efeito apenas para monitorar o progresso da tarefa
   useEffect(() => {
     if (!taskId) return;
 
     const interval = setInterval(async () => {
       try {
-        const response = await api.get(`/import/?task_id=${taskId}`);
+        const response = await api.get(`/products/import/?task_id=${taskId}`);
         const data = response.data;
         
         setStatus({
@@ -122,7 +119,8 @@ export default function ImportProducts({ onRefresh }) {
     setStatus({ progress: 0, message: "Enviando arquivo..." });
 
     try {
-      const response = await api.post("/import/", formData, {
+      // Corrigido para apontar para a rota exata de produtos/import/
+      const response = await api.post("/products/import/", formData, {
         headers: { 'Content-Type': undefined }
       });
       
@@ -133,7 +131,7 @@ export default function ImportProducts({ onRefresh }) {
       }
     } catch (err) {
       setUploading(false);
-      setError(err.response?.data?.message || "Erro ao iniciar upload.");
+      setError(err.response?.data?.message || err.response?.data?.error || "Erro ao iniciar upload. Verifique se o método POST está liberado na API.");
     }
   };
 
