@@ -41,23 +41,28 @@ function ProductImage({ src }) {
 // --- MODAL DE DETALHES ---
 function ProductDetailsModal({ p, isOpen, onClose, getCategoryName }) {
   if (!p) return null;
+  const name = p.name || p.product_name || p.product?.name || 'Sem nome';
+  const sku = p.sku || p.product_sku || p.product?.sku || '—';
+  const price = p.price ?? p.product_price ?? p.product?.price;
+  const imageUrl = p.image_url || p.product?.image_url;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md dark:bg-slate-900 dark:border-slate-800">
         <DialogTitle className="mb-4 dark:text-white">Detalhes do Produto</DialogTitle>
         <div className="flex flex-col items-center gap-4">
-          {p.image_url ? (
-            <img src={p.image_url} alt={p.name} className="w-48 h-48 object-cover rounded-lg border shadow-sm" />
+          {imageUrl ? (
+            <img src={imageUrl} alt={name} className="w-48 h-48 object-cover rounded-lg border shadow-sm" />
           ) : (
             <div className="w-48 h-48 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center">
               <ImageIcon size={48} className="text-slate-300" />
             </div>
           )}
           <div className="w-full space-y-3 mt-4 text-sm dark:text-slate-300">
-            <p><strong className="text-slate-500 dark:text-slate-400">Nome:</strong> {p.name}</p>
-            <p><strong className="text-slate-500 dark:text-slate-400">SKU:</strong> {p.sku}</p>
-            <p><strong className="text-slate-500 dark:text-slate-400">Preço:</strong> {p.price ? `R$ ${p.price}` : 'Não informado'}</p>
-            <p><strong className="text-slate-500 dark:text-slate-400">Categoria:</strong> {getCategoryName(p.category)}</p>
+            <p><strong className="text-slate-500 dark:text-slate-400">Nome:</strong> {name}</p>
+            <p><strong className="text-slate-500 dark:text-slate-400">SKU:</strong> {sku}</p>
+            <p><strong className="text-slate-500 dark:text-slate-400">Preço:</strong> {price ? `R$ ${price}` : 'Não informado'}</p>
+            <p><strong className="text-slate-500 dark:text-slate-400">Categoria:</strong> {getCategoryName(p.category || p.product?.category)}</p>
           </div>
         </div>
       </DialogContent>
@@ -68,11 +73,16 @@ function ProductDetailsModal({ p, isOpen, onClose, getCategoryName }) {
 // --- SUB-COMPONENTE EDITAR ---
 function EditProduct({ p, onUpdate, onRefresh, notify }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(p.name);
-  const [sku, setSku] = useState(p.sku);
-  const [price, setPrice] = useState(p.price || '');
+  const initialName = p.name || p.product_name || p.product?.name || '';
+  const initialSku = p.sku || p.product_sku || p.product?.sku || '';
+  const initialPrice = p.price ?? p.product_price ?? p.product?.price ?? '';
+  const initialImage = p.image_url || p.product?.image_url || null;
+
+  const [name, setName] = useState(initialName);
+  const [sku, setSku] = useState(initialSku);
+  const [price, setPrice] = useState(initialPrice);
   const [imageFile, setImageFile] = useState(null);
-  const [preview, setPreview] = useState(p.image_url || null);
+  const [preview, setPreview] = useState(initialImage);
   const [removeImage, setRemoveImage] = useState(false);
   
   const [showCamera, setShowCamera] = useState(false);
@@ -88,10 +98,10 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
 
   useEffect(() => {
     if (open) {
-      setName(p.name);
-      setSku(p.sku);
-      setPrice(p.price || '');
-      setPreview(p.image_url || null);
+      setName(p.name || p.product_name || p.product?.name || '');
+      setSku(p.sku || p.product_sku || p.product?.sku || '');
+      setPrice(p.price ?? p.product_price ?? p.product?.price ?? '');
+      setPreview(p.image_url || p.product?.image_url || null);
       setImageFile(null);
       setRemoveImage(false);
     } else {
@@ -371,46 +381,54 @@ function ImportAndReviewPanel({ onRefreshData, notify }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y dark:divide-slate-700">
-                      {irregularList.map(item => (
-                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <ProductImage src={item.image_url} />
-                              <div>
-                                <p className="text-sm font-semibold dark:text-white">{item.name}</p>
-                                <p className="text-xs font-mono text-slate-400">SKU: {item.sku}</p>
+                      {irregularList.map(item => {
+                        const itemName = item.name || item.product_name || item.product?.name || 'Produto sem nome';
+                        const itemSku = item.sku || item.product_sku || item.product?.sku || '—';
+                        const itemPrice = item.price ?? item.product_price ?? item.product?.price;
+                        const itemImage = item.image_url || item.product?.image_url;
+                        const errorMsg = item.error || item.error_message || item.motivo || "Preço fora do limite permitido";
+
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                            <td className="p-4">
+                              <div className="flex items-center gap-3">
+                                <ProductImage src={itemImage} />
+                                <div>
+                                  <p className="text-sm font-semibold dark:text-white">{itemName}</p>
+                                  <p className="text-xs font-mono text-slate-400">SKU: {itemSku}</p>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="p-4 text-sm font-bold text-amber-600 dark:text-amber-400">
-                            R$ {item.price}
-                          </td>
-                          <td className="p-4 text-xs text-red-500 font-medium">
-                            {item.error || "Preço fora do limite permitido"}
-                          </td>
-                          <td className="p-4 text-right flex justify-end gap-2 items-center">
-                            <EditProduct 
-                              p={{ ...item, endpoint: `revisao/${item.id}/` }} 
-                              onUpdate={() => {}} 
-                              onRefresh={fetchReviewData} 
-                              notify={notify} 
-                            />
-                            <button 
-                              onClick={() => handleConfirmItem(item.id)} 
-                              className="text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded transition-colors"
-                            >
-                              CONFIRMAR
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteItem(item.id)} 
-                              className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-                              title="Excluir item"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="p-4 text-sm font-bold text-amber-600 dark:text-amber-400">
+                              {itemPrice !== undefined && itemPrice !== null && itemPrice !== '' ? `R$ ${itemPrice}` : '—'}
+                            </td>
+                            <td className="p-4 text-xs text-red-500 font-medium">
+                              {errorMsg}
+                            </td>
+                            <td className="p-4 text-right flex justify-end gap-2 items-center">
+                              <EditProduct 
+                                p={{ ...item, endpoint: `revisao/${item.id}/` }} 
+                                onUpdate={() => {}} 
+                                onRefresh={fetchReviewData} 
+                                notify={notify} 
+                              />
+                              <button 
+                                onClick={() => handleConfirmItem(item.id)} 
+                                className="text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded transition-colors"
+                              >
+                                CONFIRMAR
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteItem(item.id)} 
+                                className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                title="Excluir item"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -454,32 +472,39 @@ function ImportAndReviewPanel({ onRefreshData, notify }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y dark:divide-slate-700">
-                      {duplicatesList.map(item => (
-                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <ProductImage src={item.image_url} />
-                              <span className="text-sm font-semibold dark:text-white">{item.name}</span>
-                            </div>
-                          </td>
-                          <td className="p-4 text-xs font-mono text-slate-400">{item.sku}</td>
-                          <td className="p-4 text-sm dark:text-slate-200">R$ {item.price || '—'}</td>
-                          <td className="p-4 text-right flex justify-end gap-2 items-center">
-                            <EditProduct 
-                              p={{ ...item, endpoint: `revisao/${item.id}/` }} 
-                              onUpdate={() => {}} 
-                              onRefresh={fetchReviewData} 
-                              notify={notify} 
-                            />
-                            <button 
-                              onClick={() => handleDeleteItem(item.id)} 
-                              className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {duplicatesList.map(item => {
+                        const itemName = item.name || item.product_name || item.product?.name || 'Produto sem nome';
+                        const itemSku = item.sku || item.product_sku || item.product?.sku || '—';
+                        const itemPrice = item.price ?? item.product_price ?? item.product?.price;
+                        const itemImage = item.image_url || item.product?.image_url;
+
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                            <td className="p-4">
+                              <div className="flex items-center gap-3">
+                                <ProductImage src={itemImage} />
+                                <span className="text-sm font-semibold dark:text-white">{itemName}</span>
+                              </div>
+                            </td>
+                            <td className="p-4 text-xs font-mono text-slate-400">{itemSku}</td>
+                            <td className="p-4 text-sm dark:text-slate-200">{itemPrice !== undefined && itemPrice !== null && itemPrice !== '' ? `R$ ${itemPrice}` : '—'}</td>
+                            <td className="p-4 text-right flex justify-end gap-2 items-center">
+                              <EditProduct 
+                                p={{ ...item, endpoint: `revisao/${item.id}/` }} 
+                                onUpdate={() => {}} 
+                                onRefresh={fetchReviewData} 
+                                notify={notify} 
+                              />
+                              <button 
+                                onClick={() => handleDeleteItem(item.id)} 
+                                className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
