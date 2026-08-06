@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Edit, LayoutDashboard, Database, Upload, Image as ImageIcon, X, Camera, RotateCcw, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Trash2, Edit, LayoutDashboard, Database, Upload, Image as ImageIcon, X, Camera, RotateCcw, CheckCircle, AlertCircle, Loader2, AlertTriangle, Copy } from 'lucide-react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import ImportProducts from '../components/importProducts';
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -146,18 +146,19 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
     if (imageFile) formData.append('image', imageFile);
 
     try {
-      await api.patch(`products/${p.id}/`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const endpoint = p.endpoint || `products/${p.id}/`;
+      await api.patch(endpoint, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       onUpdate(p.id, { name, sku, price });
       onRefresh();
-      notify("Produto atualizado!");
+      notify("Produto atualizado com sucesso!");
       setOpen(false);
-    } catch (e) { notify("Erro ao salvar.", "error"); }
+    } catch (e) { notify("Erro ao salvar alterações.", "error"); }
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button className="flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+        <button className="flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 px-2.5 py-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
           <Edit size={12}/> EDITAR
         </button>
       </DialogTrigger>
@@ -193,12 +194,294 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
           <div className="space-y-4">
             <div><label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">Nome</label><input value={name} onChange={e => setName(e.target.value)} className="w-full p-2 border dark:border-slate-700 rounded text-sm dark:bg-slate-800 dark:text-white" /></div>
             <div><label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">SKU</label><input value={sku} onChange={e => setSku(e.target.value)} className="w-full p-2 border dark:border-slate-700 rounded text-sm dark:bg-slate-800 dark:text-white" /></div>
-            <div><label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">Preço</label><input type="number" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-2 border dark:border-slate-700 rounded text-sm dark:bg-slate-800 dark:text-white" /></div>
+            <div><label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">Preço</label><input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-2 border dark:border-slate-700 rounded text-sm dark:bg-slate-800 dark:text-white" /></div>
           </div>
-          <button onClick={handleSave} className="w-full bg-blue-600 text-white p-2 rounded mt-6 font-bold text-sm hover:bg-blue-700">Salvar</button>
+          <button onClick={handleSave} className="w-full bg-blue-600 text-white p-2 rounded mt-6 font-bold text-sm hover:bg-blue-700">Salvar Alterações</button>
         </DialogContent>
       )}
     </Dialog>
+  );
+}
+
+// --- COMPONENTE DE GERENCIAMENTO DE REVISÃO E DUPLICADOS ---
+function ReviewAndDuplicatesPanel({ onRefreshData, notify }) {
+  const [subTab, setSubTab] = useState('irregular'); // 'irregular' | 'duplicates'
+  const [irregularList, setIrregularList] = useState([]);
+  const [duplicatesList, setDuplicatesList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const fetchReviewData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Busca dados de revisão pendentes (preços irregulares / erros)
+      const res = await api.get("/revisao/");
+      const items = res.data.results || res.data || [];
+      setIrregularList(items);
+
+      // Tenta buscar duplicados caso haja endpoint específico, ou filtra da revisão
+      try {
+        const dupRes = await api.get("/revisao/duplicados/");
+        setDuplicatesList(dupRes.data.results || dupRes.data || []);
+      } catch (err) {
+        // Fallback: filtra itens com aviso de duplicação se vierem misturados
+        setDuplicatesList(items.filter(i => i.error?.toLowerCase().includes('duplicado') || i.is_duplicate));
+      }
+    } catch (e) {
+      notify("Erro ao carregar itens de revisão.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    fetchReviewData();
+  }, [fetchReviewData]);
+
+  const handleConfirmItem = async (id) => {
+    try {
+      await api.post(`/api/revisao/${id}/confirmar/`);
+      notify("Item confirmado com sucesso!");
+      fetchReviewData();
+      onRefreshData();
+    } catch (e) {
+      const errMsg = e.response?.data?.error || "Erro ao confirmar item. Verifique os dados.";
+      notify(errMsg, "error");
+    }
+  };
+
+  const handleDeleteItem = async (id, endpoint = `revisao/${id}/`) => {
+    if (!window.confirm("Deseja realmente excluir este registro?")) return;
+    try {
+      await api.delete(endpoint);
+      notify("Registro excluído!");
+      fetchReviewData();
+      onRefreshData();
+    } catch (e) {
+      notify("Erro ao excluir registro.", "error");
+    }
+  };
+
+  const handleDeleteAllDuplicates = async () => {
+    setActionLoading(true);
+    try {
+      // Tenta endpoint em lote para duplicados, ou faz requisições individuais
+      try {
+        await api.delete("/revisao/duplicados/deletar-todos/");
+      } catch {
+        for (const item of duplicatesList) {
+          await api.delete(`revisao/${item.id}/`);
+        }
+      }
+      notify("Todos os produtos duplicados foram excluídos com sucesso!");
+      setDuplicatesList([]);
+      setConfirmDeleteModal(false);
+      fetchReviewData();
+      onRefreshData();
+    } catch (e) {
+      notify("Erro ao excluir duplicados em massa.", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Sub-abas de navegação interna */}
+      <div className="flex gap-2 border-b dark:border-slate-800 pb-3">
+        <button 
+          onClick={() => setSubTab('irregular')} 
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${subTab === 'irregular' ? 'bg-amber-500 text-white shadow' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
+        >
+          <AlertTriangle size={14} /> Preços Irregulares / Erros ({irregularList.length})
+        </button>
+        <button 
+          onClick={() => setSubTab('duplicates')} 
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${subTab === 'duplicates' ? 'bg-purple-600 text-white shadow' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
+        >
+          <Copy size={14} /> Produtos Duplicados ({duplicatesList.length})
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+        </div>
+      ) : (
+        <>
+          {subTab === 'irregular' && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 p-4 rounded-xl text-xs text-amber-800 dark:text-amber-200 flex items-start gap-3">
+                <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Atenção aos limites de preço:</p>
+                  <p>Produtos com preços fora do teto permitido aparecem aqui. Você pode editá-los diretamente para corrigir o valor e confirmar a importação em seguida.</p>
+                </div>
+              </div>
+
+              {irregularList.length === 0 ? (
+                <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-xl border dark:border-slate-800 text-slate-400">
+                  Nenhum produto com preço irregular pendente.
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-xl overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
+                      <tr>
+                        <th className="p-4 text-xs font-bold dark:text-slate-300">PRODUTO / SKU</th>
+                        <th className="p-4 text-xs font-bold dark:text-slate-300">PREÇO ATUAL</th>
+                        <th className="p-4 text-xs font-bold dark:text-slate-300">MOTIVO DO ERRO</th>
+                        <th className="p-4 text-xs font-bold dark:text-slate-300 text-right">AÇÕES</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y dark:divide-slate-700">
+                      {irregularList.map(item => (
+                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <ProductImage src={item.image_url} />
+                              <div>
+                                <p className="text-sm font-semibold dark:text-white">{item.name}</p>
+                                <p className="text-xs font-mono text-slate-400">SKU: {item.sku}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4 text-sm font-bold text-amber-600 dark:text-amber-400">
+                            R$ {item.price}
+                          </td>
+                          <td className="p-4 text-xs text-red-500 font-medium">
+                            {item.error || "Preço fora do limite permitido"}
+                          </td>
+                          <td className="p-4 text-right flex justify-end gap-2 items-center">
+                            <EditProduct 
+                              p={{ ...item, endpoint: `revisao/${item.id}/` }} 
+                              onUpdate={() => {}} 
+                              onRefresh={fetchReviewData} 
+                              notify={notify} 
+                            />
+                            <button 
+                              onClick={() => handleConfirmItem(item.id)} 
+                              className="text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded transition-colors"
+                            >
+                              CONFIRMAR
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteItem(item.id)} 
+                              className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                              title="Excluir item"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {subTab === 'duplicates' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 p-4 rounded-xl">
+                <div className="flex items-center gap-3 text-xs text-purple-800 dark:text-purple-200">
+                  <Copy size={18} />
+                  <div>
+                    <p className="font-bold">Gerenciamento de Duplicidades</p>
+                    <p>Estes registros possuem SKUs ou nomes idênticos aos já cadastrados no sistema.</p>
+                  </div>
+                </div>
+                {duplicatesList.length > 0 && (
+                  <button 
+                    onClick={() => setConfirmDeleteModal(true)}
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow transition-colors flex items-center gap-2 shrink-0"
+                  >
+                    <Trash2 size={14} /> Excluir Todos os Duplicados ({duplicatesList.length})
+                  </button>
+                )}
+              </div>
+
+              {duplicatesList.length === 0 ? (
+                <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-xl border dark:border-slate-800 text-slate-400">
+                  Nenhum produto duplicado encontrado.
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-xl overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 dark:bg-slate-800 border-b dark:border-slate-700">
+                      <tr>
+                        <th className="p-4 text-xs font-bold dark:text-slate-300">PRODUTO</th>
+                        <th className="p-4 text-xs font-bold dark:text-slate-300">SKU</th>
+                        <th className="p-4 text-xs font-bold dark:text-slate-300">PREÇO</th>
+                        <th className="p-4 text-xs font-bold dark:text-slate-300 text-right">AÇÕES</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y dark:divide-slate-700">
+                      {duplicatesList.map(item => (
+                        <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <ProductImage src={item.image_url} />
+                              <span className="text-sm font-semibold dark:text-white">{item.name}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 text-xs font-mono text-slate-400">{item.sku}</td>
+                          <td className="p-4 text-sm dark:text-slate-200">R$ {item.price || '—'}</td>
+                          <td className="p-4 text-right flex justify-end gap-2 items-center">
+                            <EditProduct 
+                              p={{ ...item, endpoint: `revisao/${item.id}/` }} 
+                              onUpdate={() => {}} 
+                              onRefresh={fetchReviewData} 
+                              notify={notify} 
+                            />
+                            <button 
+                              onClick={() => handleDeleteItem(item.id)} 
+                              className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Modal de Confirmação para Excluir Todos os Duplicados */}
+      <Dialog open={confirmDeleteModal} onOpenChange={setConfirmDeleteModal}>
+        <DialogContent className="max-w-md dark:bg-slate-900 dark:border-slate-800">
+          <DialogTitle className="mb-2 text-red-600 dark:text-red-400 flex items-center gap-2">
+            <AlertTriangle size={20} /> Excluir Todos os Duplicados
+          </DialogTitle>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
+            Tem certeza absoluta de que deseja excluir permanentemente todos os <strong>{duplicatesList.length}</strong> produtos duplicados listados? Esta ação não pode ser desfeita.
+          </p>
+          <div className="flex justify-end gap-3">
+            <button 
+              onClick={() => setConfirmDeleteModal(false)}
+              className="px-4 py-2 border dark:border-slate-700 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={handleDeleteAllDuplicates}
+              disabled={actionLoading}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50"
+            >
+              {actionLoading && <Loader2 size={16} className="animate-spin" />}
+              Confirmar Exclusão em Massa
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -219,12 +502,12 @@ export default function AdminDashboard({ products = [], categories = [], stats =
   const notify = (message, type = 'success') => setToast({ message, type });
 
   const fetchPendingCount = useCallback(async () => {
-  try {
-    const res = await api.get("/revisao/");
-    const count = res.data.count ?? (Array.isArray(res.data) ? res.data.length : (res.data.results?.length || 0));
-    setPendingCount(count);
-  } catch (e) {}
-}, []);
+    try {
+      const res = await api.get("/revisao/");
+      const count = res.data.count ?? (Array.isArray(res.data) ? res.data.length : (res.data.results?.length || 0));
+      setPendingCount(count);
+    } catch (e) {}
+  }, []);
 
   useEffect(() => { fetchPendingCount(); }, [fetchPendingCount]);
   useEffect(() => { setCurrentPage(1); }, [search, selectedCategory]);
@@ -266,7 +549,7 @@ export default function AdminDashboard({ products = [], categories = [], stats =
         {[ 
           {id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard}, 
           {id: 'produtos', label: 'PRODUTOS', icon: Database}, 
-          {id: 'importar', label: 'IMPORTAR', icon: Upload, showBadge: pendingCount > 0, count: pendingCount} 
+          {id: 'importar', label: 'REVISÃO & IMPORTAR', icon: Upload, showBadge: pendingCount > 0, count: pendingCount} 
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`relative flex items-center gap-2 px-4 py-3 rounded-md text-xs font-bold transition-all flex-1 ${activeTab === tab.id ? 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
             <tab.icon className="h-4 w-4"/> {tab.label}
@@ -340,11 +623,18 @@ export default function AdminDashboard({ products = [], categories = [], stats =
         )}
         
         {activeTab === 'importar' && (
-            <ImportProducts 
-                onRefresh={() => { onRefreshData(); fetchPendingCount(); notify("Importação processada!"); }} 
-                notify={notify}
-                setProgress={setProgress}
-            />
+            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="space-y-6">
+              <ImportProducts 
+                  onRefresh={() => { onRefreshData(); fetchPendingCount(); }} 
+                  notify={notify}
+                  setProgress={setProgress}
+              />
+              
+              <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-xl p-6 shadow-sm">
+                <h3 className="text-sm font-bold dark:text-white mb-4">Central de Revisão e Tratamento de Pendências</h3>
+                <ReviewAndDuplicatesPanel onRefreshData={() => { onRefreshData(); fetchPendingCount(); }} notify={notify} />
+              </div>
+            </motion.div>
         )}
       </AnimatePresence>
     </div>
