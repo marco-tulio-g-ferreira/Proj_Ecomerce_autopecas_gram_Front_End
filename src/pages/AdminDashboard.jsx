@@ -38,21 +38,29 @@ function ProductImage({ src }) {
   );
 }
 
+// --- HELPER UNIFICADO DE DADOS ---
+const getProductData = (item) => {
+  return {
+    name: item.name || item.product_name || item.product?.name || item.data?.name || item.raw_data?.name || 'Produto sem nome',
+    sku: item.sku || item.product_sku || item.product?.sku || item.data?.sku || item.raw_data?.sku || '—',
+    price: item.price ?? item.product_price ?? item.product?.price ?? item.data?.price ?? item.raw_data?.price,
+    image_url: item.image_url || item.product?.image_url || item.data?.image_url || item.raw_data?.image_url,
+    error: item.error || item.error_message || item.motivo || item.data?.error || "Preço fora do limite permitido"
+  };
+};
+
 // --- MODAL DE DETALHES ---
 function ProductDetailsModal({ p, isOpen, onClose, getCategoryName }) {
   if (!p) return null;
-  const name = p.name || p.product_name || p.product?.name || 'Sem nome';
-  const sku = p.sku || p.product_sku || p.product?.sku || '—';
-  const price = p.price ?? p.product_price ?? p.product?.price;
-  const imageUrl = p.image_url || p.product?.image_url;
+  const { name, sku, price, image_url } = getProductData(p);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md dark:bg-slate-900 dark:border-slate-800">
         <DialogTitle className="mb-4 dark:text-white">Detalhes do Produto</DialogTitle>
         <div className="flex flex-col items-center gap-4">
-          {imageUrl ? (
-            <img src={imageUrl} alt={name} className="w-48 h-48 object-cover rounded-lg border shadow-sm" />
+          {image_url ? (
+            <img src={image_url} alt={name} className="w-48 h-48 object-cover rounded-lg border shadow-sm" />
           ) : (
             <div className="w-48 h-48 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center">
               <ImageIcon size={48} className="text-slate-300" />
@@ -61,7 +69,7 @@ function ProductDetailsModal({ p, isOpen, onClose, getCategoryName }) {
           <div className="w-full space-y-3 mt-4 text-sm dark:text-slate-300">
             <p><strong className="text-slate-500 dark:text-slate-400">Nome:</strong> {name}</p>
             <p><strong className="text-slate-500 dark:text-slate-400">SKU:</strong> {sku}</p>
-            <p><strong className="text-slate-500 dark:text-slate-400">Preço:</strong> {price ? `R$ ${price}` : 'Não informado'}</p>
+            <p><strong className="text-slate-500 dark:text-slate-400">Preço:</strong> {price !== undefined && price !== null && price !== '' ? `R$ ${price}` : 'Não informado'}</p>
             <p><strong className="text-slate-500 dark:text-slate-400">Categoria:</strong> {getCategoryName(p.category || p.product?.category)}</p>
           </div>
         </div>
@@ -73,16 +81,13 @@ function ProductDetailsModal({ p, isOpen, onClose, getCategoryName }) {
 // --- SUB-COMPONENTE EDITAR ---
 function EditProduct({ p, onUpdate, onRefresh, notify }) {
   const [open, setOpen] = useState(false);
-  const initialName = p.name || p.product_name || p.product?.name || '';
-  const initialSku = p.sku || p.product_sku || p.product?.sku || '';
-  const initialPrice = p.price ?? p.product_price ?? p.product?.price ?? '';
-  const initialImage = p.image_url || p.product?.image_url || null;
+  const parsed = getProductData(p);
 
-  const [name, setName] = useState(initialName);
-  const [sku, setSku] = useState(initialSku);
-  const [price, setPrice] = useState(initialPrice);
+  const [name, setName] = useState(parsed.name);
+  const [sku, setSku] = useState(parsed.sku);
+  const [price, setPrice] = useState(parsed.price ?? '');
   const [imageFile, setImageFile] = useState(null);
-  const [preview, setPreview] = useState(initialImage);
+  const [preview, setPreview] = useState(parsed.image_url || null);
   const [removeImage, setRemoveImage] = useState(false);
   
   const [showCamera, setShowCamera] = useState(false);
@@ -98,10 +103,11 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
 
   useEffect(() => {
     if (open) {
-      setName(p.name || p.product_name || p.product?.name || '');
-      setSku(p.sku || p.product_sku || p.product?.sku || '');
-      setPrice(p.price ?? p.product_price ?? p.product?.price ?? '');
-      setPreview(p.image_url || p.product?.image_url || null);
+      const fresh = getProductData(p);
+      setName(fresh.name);
+      setSku(fresh.sku);
+      setPrice(fresh.price ?? '');
+      setPreview(fresh.image_url || null);
       setImageFile(null);
       setRemoveImage(false);
     } else {
@@ -155,7 +161,7 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
 
     try {
       const endpoint = p.endpoint || `products/${p.id}/`;
-      await api.patch(endpoint, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await api.patch(endpoint, formData);
       onUpdate(p.id, { name, sku, price });
       onRefresh();
       notify("Produto atualizado com sucesso!");
@@ -225,12 +231,13 @@ function ImportAndReviewPanel({ onRefreshData, notify }) {
   const fetchReviewData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("revisao/");
+      // page_size: 1000 garante que traga TODOS os itens sem limitar em 20
+      const res = await api.get("revisao/", { params: { page_size: 1000, limit: 1000 } });
       const items = res.data.results || res.data || [];
       setIrregularList(items);
 
       try {
-        const dupRes = await api.get("revisao/duplicados/");
+        const dupRes = await api.get("revisao/duplicados/", { params: { page_size: 1000, limit: 1000 } });
         setDuplicatesList(dupRes.data.results || dupRes.data || []);
       } catch (err) {
         setDuplicatesList(items.filter(i => i.error?.toLowerCase().includes('duplicado') || i.is_duplicate));
@@ -255,14 +262,13 @@ function ImportAndReviewPanel({ onRefreshData, notify }) {
 
     setUploading(true);
     try {
-      await api.post("products/import/", formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      await api.post("products/import/", formData);
       notify("Arquivo importado com sucesso!");
       fetchReviewData();
       onRefreshData();
     } catch (err) {
-      notify("Erro ao importar arquivo. Verifique o formato.", "error");
+      const errorMsg = err.response?.data?.error || err.response?.data?.detail || err.response?.data?.message || "Erro ao importar arquivo. Verifique o formato.";
+      notify(errorMsg, "error");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -382,28 +388,24 @@ function ImportAndReviewPanel({ onRefreshData, notify }) {
                     </thead>
                     <tbody className="divide-y dark:divide-slate-700">
                       {irregularList.map(item => {
-                        const itemName = item.name || item.product_name || item.product?.name || 'Produto sem nome';
-                        const itemSku = item.sku || item.product_sku || item.product?.sku || '—';
-                        const itemPrice = item.price ?? item.product_price ?? item.product?.price;
-                        const itemImage = item.image_url || item.product?.image_url;
-                        const errorMsg = item.error || item.error_message || item.motivo || "Preço fora do limite permitido";
+                        const { name, sku, price, image_url, error } = getProductData(item);
 
                         return (
                           <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                             <td className="p-4">
                               <div className="flex items-center gap-3">
-                                <ProductImage src={itemImage} />
+                                <ProductImage src={image_url} />
                                 <div>
-                                  <p className="text-sm font-semibold dark:text-white">{itemName}</p>
-                                  <p className="text-xs font-mono text-slate-400">SKU: {itemSku}</p>
+                                  <p className="text-sm font-semibold dark:text-white">{name}</p>
+                                  <p className="text-xs font-mono text-slate-400">SKU: {sku}</p>
                                 </div>
                               </div>
                             </td>
                             <td className="p-4 text-sm font-bold text-amber-600 dark:text-amber-400">
-                              {itemPrice !== undefined && itemPrice !== null && itemPrice !== '' ? `R$ ${itemPrice}` : '—'}
+                              {price !== undefined && price !== null && price !== '' ? `R$ ${price}` : '—'}
                             </td>
                             <td className="p-4 text-xs text-red-500 font-medium">
-                              {errorMsg}
+                              {error}
                             </td>
                             <td className="p-4 text-right flex justify-end gap-2 items-center">
                               <EditProduct 
@@ -473,21 +475,18 @@ function ImportAndReviewPanel({ onRefreshData, notify }) {
                     </thead>
                     <tbody className="divide-y dark:divide-slate-700">
                       {duplicatesList.map(item => {
-                        const itemName = item.name || item.product_name || item.product?.name || 'Produto sem nome';
-                        const itemSku = item.sku || item.product_sku || item.product?.sku || '—';
-                        const itemPrice = item.price ?? item.product_price ?? item.product?.price;
-                        const itemImage = item.image_url || item.product?.image_url;
+                        const { name, sku, price, image_url } = getProductData(item);
 
                         return (
                           <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                             <td className="p-4">
                               <div className="flex items-center gap-3">
-                                <ProductImage src={itemImage} />
-                                <span className="text-sm font-semibold dark:text-white">{itemName}</span>
+                                <ProductImage src={image_url} />
+                                <span className="text-sm font-semibold dark:text-white">{name}</span>
                               </div>
                             </td>
-                            <td className="p-4 text-xs font-mono text-slate-400">{itemSku}</td>
-                            <td className="p-4 text-sm dark:text-slate-200">{itemPrice !== undefined && itemPrice !== null && itemPrice !== '' ? `R$ ${itemPrice}` : '—'}</td>
+                            <td className="p-4 text-xs font-mono text-slate-400">{sku}</td>
+                            <td className="p-4 text-sm dark:text-slate-200">{price !== undefined && price !== null && price !== '' ? `R$ ${price}` : '—'}</td>
                             <td className="p-4 text-right flex justify-end gap-2 items-center">
                               <EditProduct 
                                 p={{ ...item, endpoint: `revisao/${item.id}/` }} 
