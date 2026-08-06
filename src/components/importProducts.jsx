@@ -120,8 +120,7 @@ export default function ImportProducts({ onRefresh }) {
 
     try {
       // Corrigido para apontar para a rota exata de produtos/import/
-      const response = await api.post("/products/import/", formData, {
-        headers: { 'Content-Type': undefined }
+      const response = await api.post("/admin/products/import/", formData, {        headers: { 'Content-Type': undefined }
       });
       
       if (response.data.task_id) {
