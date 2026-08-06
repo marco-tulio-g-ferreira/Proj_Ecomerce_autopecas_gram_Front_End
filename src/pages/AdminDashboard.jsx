@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, Edit, LayoutDashboard, Database, Upload, Image as ImageIcon, X, Camera, RotateCcw, CheckCircle, AlertCircle, Loader2, AlertTriangle, Copy } from 'lucide-react';
+import { Trash2, Edit, LayoutDashboard, Database, Upload, Image as ImageIcon, X, Camera, RotateCcw, CheckCircle, AlertCircle, Loader2, AlertTriangle, Copy, FileSpreadsheet } from 'lucide-react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import ImportProducts from '../components/importProducts';
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { useImport } from '../context/ImportContext';
 import api from '../services/api'; 
 
 // --- COMPONENTE DE NOTIFICAÇÃO (TOAST) ---
@@ -203,29 +201,28 @@ function EditProduct({ p, onUpdate, onRefresh, notify }) {
   );
 }
 
-// --- COMPONENTE DE GERENCIAMENTO DE REVISÃO E DUPLICADOS ---
-function ReviewAndDuplicatesPanel({ onRefreshData, notify }) {
+// --- PAINEL INTEGRADO DE IMPORTAÇÃO, REVISÃO E DUPLICADOS ---
+function ImportAndReviewPanel({ onRefreshData, notify }) {
   const [subTab, setSubTab] = useState('irregular'); // 'irregular' | 'duplicates'
   const [irregularList, setIrregularList] = useState([]);
   const [duplicatesList, setDuplicatesList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [confirmDeleteModal, setConfirmDeleteModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const fileInputRef = useRef(null);
 
   const fetchReviewData = useCallback(async () => {
     setLoading(true);
     try {
-      // Busca dados de revisão pendentes (preços irregulares / erros)
-      const res = await api.get("/revisao/");
+      const res = await api.get("revisao/");
       const items = res.data.results || res.data || [];
       setIrregularList(items);
 
-      // Tenta buscar duplicados caso haja endpoint específico, ou filtra da revisão
       try {
-        const dupRes = await api.get("/revisao/duplicados/");
+        const dupRes = await api.get("revisao/duplicados/");
         setDuplicatesList(dupRes.data.results || dupRes.data || []);
       } catch (err) {
-        // Fallback: filtra itens com aviso de duplicação se vierem misturados
         setDuplicatesList(items.filter(i => i.error?.toLowerCase().includes('duplicado') || i.is_duplicate));
       }
     } catch (e) {
@@ -239,9 +236,32 @@ function ReviewAndDuplicatesPanel({ onRefreshData, notify }) {
     fetchReviewData();
   }, [fetchReviewData]);
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploading(true);
+    try {
+      await api.post("products/import/", formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      notify("Arquivo importado com sucesso!");
+      fetchReviewData();
+      onRefreshData();
+    } catch (err) {
+      notify("Erro ao importar arquivo. Verifique o formato.", "error");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleConfirmItem = async (id) => {
     try {
-      await api.post(`/api/revisao/${id}/confirmar/`);
+      await api.post(`revisao/${id}/confirmar/`);
       notify("Item confirmado com sucesso!");
       fetchReviewData();
       onRefreshData();
@@ -251,10 +271,10 @@ function ReviewAndDuplicatesPanel({ onRefreshData, notify }) {
     }
   };
 
-  const handleDeleteItem = async (id, endpoint = `revisao/${id}/`) => {
+  const handleDeleteItem = async (id) => {
     if (!window.confirm("Deseja realmente excluir este registro?")) return;
     try {
-      await api.delete(endpoint);
+      await api.delete(`revisao/${id}/`);
       notify("Registro excluído!");
       fetchReviewData();
       onRefreshData();
@@ -266,9 +286,8 @@ function ReviewAndDuplicatesPanel({ onRefreshData, notify }) {
   const handleDeleteAllDuplicates = async () => {
     setActionLoading(true);
     try {
-      // Tenta endpoint em lote para duplicados, ou faz requisições individuais
       try {
-        await api.delete("/revisao/duplicados/deletar-todos/");
+        await api.delete("revisao/duplicados/deletar-todos/");
       } catch {
         for (const item of duplicatesList) {
           await api.delete(`revisao/${item.id}/`);
@@ -288,6 +307,30 @@ function ReviewAndDuplicatesPanel({ onRefreshData, notify }) {
 
   return (
     <div className="space-y-6">
+      {/* Bloco de Upload de Nova Planilha */}
+      <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 p-6 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-blue-50 dark:bg-blue-950/40 text-blue-600 rounded-xl">
+            <FileSpreadsheet size={28} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold dark:text-white">Importar Nova Planilha de Produtos</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Envie arquivos nos formatos CSV ou Excel para análise automática.</p>
+          </div>
+        </div>
+        <div>
+          <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
+          <button 
+            onClick={() => fileInputRef.current.click()}
+            disabled={uploading}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2.5 rounded-lg shadow transition-colors flex items-center gap-2 disabled:opacity-50 shrink-0"
+          >
+            {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+            {uploading ? "Importando..." : "Selecionar Arquivo"}
+          </button>
+        </div>
+      </div>
+
       {/* Sub-abas de navegação interna */}
       <div className="flex gap-2 border-b dark:border-slate-800 pb-3">
         <button 
@@ -312,14 +355,6 @@ function ReviewAndDuplicatesPanel({ onRefreshData, notify }) {
         <>
           {subTab === 'irregular' && (
             <div className="space-y-4">
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 p-4 rounded-xl text-xs text-amber-800 dark:text-amber-200 flex items-start gap-3">
-                <AlertTriangle size={18} className="shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold">Atenção aos limites de preço:</p>
-                  <p>Produtos com preços fora do teto permitido aparecem aqui. Você pode editá-los diretamente para corrigir o valor e confirmar a importação em seguida.</p>
-                </div>
-              </div>
-
               {irregularList.length === 0 ? (
                 <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-xl border dark:border-slate-800 text-slate-400">
                   Nenhum produto com preço irregular pendente.
@@ -497,13 +532,12 @@ export default function AdminDashboard({ products = [], categories = [], stats =
   const [pendingCount, setPendingCount] = useState(0);
   
   const [toast, setToast] = useState(null);
-  const { setProgress } = useImport(); 
 
   const notify = (message, type = 'success') => setToast({ message, type });
 
   const fetchPendingCount = useCallback(async () => {
     try {
-      const res = await api.get("/revisao/");
+      const res = await api.get("revisao/");
       const count = res.data.count ?? (Array.isArray(res.data) ? res.data.length : (res.data.results?.length || 0));
       setPendingCount(count);
     } catch (e) {}
@@ -524,7 +558,7 @@ export default function AdminDashboard({ products = [], categories = [], stats =
   const fetchData = useCallback(async () => {
     setIsSearching(true);
     try {
-      const response = await api.get(`products/`, { params: { search, category: selectedCategory, page: currentPage } });
+      const response = await api.get("products/", { params: { search, category: selectedCategory, page: currentPage } });
       setData(response.data.results || []);
     } catch (e) { notify("Erro ao carregar dados.", "error"); } finally { setIsSearching(false); }
   }, [search, selectedCategory, currentPage]);
@@ -549,7 +583,7 @@ export default function AdminDashboard({ products = [], categories = [], stats =
         {[ 
           {id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard}, 
           {id: 'produtos', label: 'PRODUTOS', icon: Database}, 
-          {id: 'importar', label: 'REVISÃO & IMPORTAR', icon: Upload, showBadge: pendingCount > 0, count: pendingCount} 
+          {id: 'importar', label: 'IMPORTAR & REVISÃO', icon: Upload, showBadge: pendingCount > 0, count: pendingCount} 
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`relative flex items-center gap-2 px-4 py-3 rounded-md text-xs font-bold transition-all flex-1 ${activeTab === tab.id ? 'bg-white dark:bg-slate-700 shadow text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
             <tab.icon className="h-4 w-4"/> {tab.label}
@@ -624,16 +658,10 @@ export default function AdminDashboard({ products = [], categories = [], stats =
         
         {activeTab === 'importar' && (
             <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="space-y-6">
-              <ImportProducts 
-                  onRefresh={() => { onRefreshData(); fetchPendingCount(); }} 
+              <ImportAndReviewPanel 
+                  onRefreshData={() => { onRefreshData(); fetchPendingCount(); }} 
                   notify={notify}
-                  setProgress={setProgress}
               />
-              
-              <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-xl p-6 shadow-sm">
-                <h3 className="text-sm font-bold dark:text-white mb-4">Central de Revisão e Tratamento de Pendências</h3>
-                <ReviewAndDuplicatesPanel onRefreshData={() => { onRefreshData(); fetchPendingCount(); }} notify={notify} />
-              </div>
             </motion.div>
         )}
       </AnimatePresence>
